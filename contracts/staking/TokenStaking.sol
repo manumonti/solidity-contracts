@@ -58,7 +58,7 @@ contract TokenStaking is Ownable, IStaking, Checkpoints {
         address authorizer;
         mapping(address => AppAuthorization) authorizations;
         address[] authorizedApplications;
-        uint256 startTStakingTimestamp;
+        uint256 startStakingTimestamp;
     }
 
     struct AppAuthorization {
@@ -274,7 +274,7 @@ contract TokenStaking is Ownable, IStaking, Checkpoints {
 
         operatorStruct.tStake = amount;
         /* solhint-disable-next-line not-rely-on-time */
-        operatorStruct.startTStakingTimestamp = block.timestamp;
+        operatorStruct.startStakingTimestamp = block.timestamp;
 
         increaseStakeCheckpoint(operator, amount);
 
@@ -355,6 +355,8 @@ contract TokenStaking is Ownable, IStaking, Checkpoints {
         operatorStruct.owner = msg.sender;
         operatorStruct.authorizer = authorizer;
         operatorStruct.beneficiary = beneficiary;
+        /* solhint-disable-next-line not-rely-on-time */
+        operatorStruct.startStakingTimestamp = block.timestamp;
 
         increaseStakeCheckpoint(operator, tAmount);
 
@@ -734,8 +736,10 @@ contract TokenStaking is Ownable, IStaking, Checkpoints {
         );
         operatorStruct.tStake -= amount;
         require(
-            operatorStruct.tStake >= minTStakeAmount ||
-                operatorStruct.startTStakingTimestamp + MIN_STAKE_TIME <=
+            operatorStruct.nuInTStake != 0 ||
+                operatorStruct.keepInTStake != 0 ||
+                operatorStruct.tStake >= minTStakeAmount ||
+                operatorStruct.startStakingTimestamp + MIN_STAKE_TIME <=
                 /* solhint-disable-next-line not-rely-on-time */
                 block.timestamp,
             "Can't unstake earlier than 24h"
@@ -804,6 +808,16 @@ contract TokenStaking is Ownable, IStaking, Checkpoints {
             "Too much to unstake"
         );
         operatorStruct.nuInTStake -= amount;
+        require(
+            (operatorStruct.tStake >= minTStakeAmount &&
+                minTStakeAmount != 0) ||
+                operatorStruct.keepInTStake != 0 ||
+                operatorStruct.nuInTStake > 0 ||
+                operatorStruct.startStakingTimestamp + MIN_STAKE_TIME <=
+                /* solhint-disable-next-line not-rely-on-time */
+                block.timestamp,
+            "Can't unstake earlier than 24h"
+        );
         decreaseStakeCheckpoint(operator, amount);
         emit Unstaked(operator, amount);
     }
@@ -823,9 +837,9 @@ contract TokenStaking is Ownable, IStaking, Checkpoints {
             "Stake still authorized"
         );
         require(
-            operatorStruct.tStake == 0 ||
-                minTStakeAmount == 0 ||
-                operatorStruct.startTStakingTimestamp + MIN_STAKE_TIME <=
+            ((operatorStruct.tStake == 0 || minTStakeAmount == 0) &&
+                operatorStruct.nuInTStake == 0) ||
+                operatorStruct.startStakingTimestamp + MIN_STAKE_TIME <=
                 /* solhint-disable-next-line not-rely-on-time */
                 block.timestamp,
             "Can't unstake earlier than 24h"
@@ -1093,17 +1107,17 @@ contract TokenStaking is Ownable, IStaking, Checkpoints {
         nuInTStake = operatorStruct.nuInTStake;
     }
 
-    /// @notice Returns start staking timestamp for T stake.
+    /// @notice Returns start staking timestamp for T/NU stake.
     /// @dev    This value is set at most once, and only when a stake is created
-    ///         with T tokens. If a stake is created from a legacy stake,
-    ///         this value will remain as zero
-    function getStartTStakingTimestamp(address operator)
+    ///         with T or NU tokens. If a stake is created from a legacy KEEP
+    ///         stake, this value will remain as zero
+    function getStartStakingTimestamp(address operator)
         external
         view
         override
         returns (uint256)
     {
-        return operators[operator].startTStakingTimestamp;
+        return operators[operator].startStakingTimestamp;
     }
 
     /// @notice Returns staked amount of NU for the specified operator
