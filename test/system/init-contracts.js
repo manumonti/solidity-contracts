@@ -1,14 +1,15 @@
+const { helpers } = require("hardhat")
+const { impersonateAccount } = helpers.account
+const { to1e18 } = helpers.number
+
 const {
   keepTokenAddress,
   nuCypherTokenAddress,
   keepTokenStakingAddress,
   nuCypherStakingEscrowAddress,
   keepRegistryAddress,
+  keepTokenGrantAddress,
 } = require("./constants.js")
-const {
-  to1e18,
-  impersonateAccount,
-} = require("../helpers/contract-test-helpers")
 
 async function initContracts() {
   const deployer = await ethers.getSigner(0)
@@ -18,21 +19,28 @@ async function initContracts() {
   const keepTokenStaking = await resolveKeepTokenStaking()
   const nuCypherStakingEscrow = await resolveNuCypherStakingEscrow()
   const keepRegistry = await resolveKeepRegistry()
+  const keepTokenGrant = await resolveKeepTokenGrant()
 
-  const tToken = await deployTToken(to1e18(1000000))
+  // 10 billion T minted
+  const tToken = await deployTToken(to1e18(10000000000))
 
   const keepVendingMachine = await deployVendingMachine(
     keepToken,
     tToken,
-    to1e18(1000000),
-    to1e18(500000)
+    // 999,848,780 KEEP is the current KEEP total supply
+    to1e18(999848780),
+    // 45% of T supply goes to KEEP vending machine
+    to1e18(4500000000)
   )
 
   const nuCypherVendingMachine = await deployVendingMachine(
     nuCypherToken,
     tToken,
-    to1e18(1000000),
-    to1e18(500000)
+    // 1,350,000,000 is the NU total supply after pausing inflation
+    // (this number will be different for mainnet deployment but close to this one)
+    to1e18(1350000000),
+    // 45% of T supply goes to KEEP vending machine
+    to1e18(4500000000)
   )
 
   const keepStake = await deployKeepStake(keepTokenStaking)
@@ -50,22 +58,25 @@ async function initContracts() {
   // to work with Keep authorizations.
   await keepRegistry
     .connect(
-      await impersonateAccount(
-        await keepRegistry.registryKeeper(),
-        deployer,
-        "5"
-      )
+      await impersonateAccount(await keepRegistry.registryKeeper(), {
+        from: deployer,
+        value: "5",
+      })
     )
     .approveOperatorContract(tokenStaking.address)
 
   return {
+    keepToken: keepToken,
+    keepTokenGrant: keepTokenGrant,
     keepTokenStaking: keepTokenStaking,
     tokenStaking: tokenStaking,
+    keepVendingMachine: keepVendingMachine,
+    nuVendingMaching: nuCypherVendingMachine,
   }
 }
 
 async function resolveKeepToken() {
-  return await ethers.getContractAt("IERC20", keepTokenAddress)
+  return await ethers.getContractAt("IKeepToken", keepTokenAddress)
 }
 
 async function resolveNuCypherToken() {
@@ -88,6 +99,10 @@ async function resolveNuCypherStakingEscrow() {
 
 async function resolveKeepRegistry() {
   return await ethers.getContractAt("IKeepRegistry", keepRegistryAddress)
+}
+
+async function resolveKeepTokenGrant() {
+  return await ethers.getContractAt("IKeepTokenGrant", keepTokenGrantAddress)
 }
 
 async function deployTToken() {

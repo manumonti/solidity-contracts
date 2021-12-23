@@ -4,7 +4,10 @@ artifacts/
 build/
 cache/
 deployments/
+export/
 export.json
+
+external/npm
 
 typechain/
 
