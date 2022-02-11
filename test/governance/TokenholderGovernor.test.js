@@ -81,6 +81,7 @@ describe("TokenholderGovernor", () => {
       vetoer,
       bystander,
       recipient,
+      proposer,
     ] = await ethers.getSigners()
 
     const T = await ethers.getContractFactory("T")
@@ -519,6 +520,47 @@ describe("TokenholderGovernor", () => {
           })
         })
       })
+    })
+  })
+
+  describe("when migrating Tokenholder Governor", () => {
+    beforeEach(async () => {
+      const TestGovernor = await ethers.getContractFactory(
+        "TestTokenholderGovernor"
+      )
+
+      // TODO: mint of 1000 tokens (liquid) to an account. This account propose and votes.
+      console.log(await timelock.hasRole(PROPOSER_ROLE, proposer.address))
+
+      tGovDest = await TestGovernor.deploy(
+        tToken.address,
+        tStaking.address,
+        timelock.address,
+        vetoer.address
+      )
+      await tGovDest.deployed()
+
+      let description = "Proposal to migrate to new Tokenholder Governor"
+      let grantRoleTx = await timelock.populateTransaction.grantRole(PROPOSER_ROLE, tGovDest.address)
+      let revokeRoleTx = await timelock.populateTransaction.revokeRole(PROPOSER_ROLE, tGov.address)
+
+      let proposal = [
+        [timelock.address, timelock.address],
+        [0, 0],
+        [grantRoleTx.data, revokeRoleTx.data]
+      ]
+      let proposalWithDescription = [...proposal, description]
+
+      console.log(...proposalWithDescription)
+      let descriptionHash = ethers.utils.id(description)
+      // let proposalWithHash = [...proposal, descriptionHash]
+      // let proposalForTimelock = [...proposal, HashZero, descriptionHash]
+
+      await tGov.connect(proposer).propose(...proposalWithDescription)
+    })
+
+    it("Dummy test", () => {
+      console.log("dummy test")
     })
   })
 })
